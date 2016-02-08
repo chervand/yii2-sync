@@ -66,16 +66,20 @@ class ActiveBinding extends Binding
                 } else {
                     $related = $model->$relation;
                 }
-                $related->setScenario('sync');
-                switch ($this->direction($model, $related)) {
-                    case static::DIRECTION_MODEL:
-                        $attributes = $this->attributes($related);
-                        $synced = $synced && $this->commit($model, $attributes);
-                        break;
-                    case static::DIRECTION_RELATED:
-                        $attributes = $this->attributes($model);
-                        $synced = $synced && $this->commit($related, $attributes);
-                        break;
+                if ($related instanceof ActiveRecord) {
+                    $related->setScenario('sync');
+                    switch ($this->direction($model, $related)) {
+                        case static::DIRECTION_MODEL:
+                            $attributes = $this->attributes($related);
+                            $synced = $synced && $this->commit($model, $attributes);
+                            break;
+                        case static::DIRECTION_RELATED:
+                            $attributes = $this->attributes($model);
+                            $synced = $synced && $this->commit($related, $attributes);
+                            break;
+                    }
+                } else {
+                    $synced = false;
                 }
             }
             if ($this->transactional === true) {

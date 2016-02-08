@@ -31,21 +31,24 @@ class SyncBehavior extends Behavior
      * @param Model|Model[] $models models to synchronize
      * @param array $bindings bindings to apply, if empty all assigned bindings will be applied
      * @param callable|integer|null $direction sync direction, if null defined by binding
+     * @param bool $throwException whether to throw exception in case model can't be synchronized or not
      * @return bool whether synchronization was successful or not
      * @throws InvalidConfigException
      * @see ensureBindings()
      */
-    public static function syncMultiple($models, $bindings = [], $direction = null)
+    public static function syncMultiple($models, $bindings = [], $direction = null, $throwException = true)
     {
         $models = is_array($models) ? $models : [$models];
         $bindings = is_array($bindings) ? $bindings : [$bindings];
 
         $synced = true;
         foreach ($models as $model) {
-            if (!$model instanceof Model) {
+            if (!$model instanceof Model && $throwException === true) {
                 throw new InvalidConfigException(get_class($model) . ' is not an instance of Model.');
             }
-            $synced = $synced && $model->sync($bindings, $direction);
+            if ($model->hasMethod('sync') || $throwException === true) {
+                $synced = $synced && $model->sync($bindings, $direction);
+            }
         }
 
         return $synced;

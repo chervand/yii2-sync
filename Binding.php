@@ -2,6 +2,7 @@
 
 namespace chervand\sync;
 
+use Yii;
 use yii\base\Component;
 use yii\base\InvalidConfigException;
 use yii\base\Model;
@@ -14,6 +15,9 @@ abstract class Binding extends Component implements BindingInterface
 {
     const DIRECTION_MODEL = 0;
     const DIRECTION_RELATED = 1;
+    const EVENT_BEFORE_SYNC = 'beforeSync';
+    const EVENT_AFTER_SYNC = 'afterSync';
+
     /**
      * @var string
      */
@@ -27,10 +31,6 @@ abstract class Binding extends Component implements BindingInterface
      */
     public $sync;
     /**
-     * @var callable|integer|null
-     */
-    public $direction;
-    /**
      * @var callable|null
      */
     public $attributes;
@@ -38,6 +38,10 @@ abstract class Binding extends Component implements BindingInterface
      * @var callable|null
      */
     public $commit;
+    /**
+     * @var callable|integer|null
+     */
+    public $direction;
 
 
     /**
@@ -64,11 +68,30 @@ abstract class Binding extends Component implements BindingInterface
      */
     public function sync()
     {
-        if ($this->sync instanceof \Closure) {
-            return call_user_func($this->sync, $this);
+        $synced = false;
+        if ($this->beforeSync()) {
+            if (is_callable($this->sync)) {
+                $synced = call_user_func($this->sync, $this);
+            } else {
+                $synced = $this->syncInternal();
+            }
+            $this->afterSync();
         }
 
-        return $this->syncInternal();
+        Yii::info($this->id . ': ' . implode(', ', [
+                get_class($this->model),
+                $synced ? 'OK' : 'FAILED'
+            ]), __METHOD__);
+
+        return $synced;
+    }
+
+    protected function beforeSync()
+    {
+        $event = new SyncEvent(['binding' => $this]);
+        $this->trigger(self::EVENT_BEFORE_SYNC, $event);
+
+        return $event->isValid;
     }
 
     /**
@@ -76,17 +99,11 @@ abstract class Binding extends Component implements BindingInterface
      */
     protected abstract function syncInternal();
 
-
-    public function direction(&$model, &$related)
+    protected function afterSync()
     {
-        if (is_callable($this->direction)) {
-            return call_user_func($this->direction, $model);
-        }
-        if (in_array($this->direction, [static::DIRECTION_MODEL, static::DIRECTION_RELATED])) {
-            return $this->direction;
-        }
-
-        return null;
+        $this->trigger(self::EVENT_AFTER_SYNC, new SyncEvent([
+            'binding' => $this
+        ]));
     }
 
     /**
@@ -125,4 +142,22 @@ abstract class Binding extends Component implements BindingInterface
      * @return bool
      */
     protected abstract function commitInternal($model, $attributes);
+
+    /**
+     * @inheritdoc
+     */
+    public function direction(&$model, &$related)
+    {
+        if (is_callable($this->direction)) {
+            return call_user_func($this->direction, $model);
+        }
+        if (in_array($this->direction, [
+            self::DIRECTION_MODEL,
+            self::DIRECTION_RELATED,
+        ])) {
+            return $this->direction;
+        }
+
+        return null;
+    }
 }
